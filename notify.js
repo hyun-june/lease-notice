@@ -54,7 +54,7 @@ const ymd = s => { const d = String(s || '').replace(/[.\-]/g, ''); return d.len
 
 const dday = c => {
   if (!c) return '';
-  const n = Math.ceil((new Date(c + 'T23:59:59+09:00') - Date.now()) / 864e5);
+  const n = Math.ceil((new Date(c + 'T00:00:00+09:00') - Date.now()) / 864e5);
   return n < 0 ? '마감' : n === 0 ? '오늘 마감' : `D-${n}`;
 };
 
@@ -127,6 +127,9 @@ async function main() {
     process.exit(1);
   }
 
+  // 신규가 0건이어도 매번 갱신해야 refresh_token 회전이 끊기지 않는다
+  const token = await refreshToken(key, refresh);
+
   const seen = fs.existsSync(SEEN_PATH) ? JSON.parse(fs.readFileSync(SEEN_PATH, 'utf8')) : {};
   const seenLh = new Set(seen.lh || []);
   const seenSh = new Set(seen.sh || []);
@@ -141,8 +144,6 @@ async function main() {
   const all = [...lh, ...sh];
   console.log(`LH 신규 ${lh.length}건 / SH 신규 ${sh.length}건`);
   if (!all.length) { console.log('전송 0건'); return; }
-
-  const token = await refreshToken(key, refresh);
 
   let sent = 0;
   const failed = new Set();
