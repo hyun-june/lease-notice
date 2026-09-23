@@ -4,6 +4,7 @@ const LH = 'https://k-skill-proxy.nomadamas.org/v1/lh-notice/search';
 const get = url => fetch(url, { signal: AbortSignal.timeout(20000) }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; });
 
 module.exports = async (req, res) => {
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   let regions;
   try { ({ regions } = loadConfig()); }
   catch (e) { return res.status(500).json({ error: 'config', message: e.message, allRegions: REGIONS }); }
@@ -12,7 +13,7 @@ module.exports = async (req, res) => {
   const lh = get(`${LH}?panSs=${encodeURIComponent('공고중')}&pageSize=1000`).then(r => r.json()).then(d => {
     if (d.error) throw new Error(d.message || d.error);
     for (const i of (d.items || []).filter(i => lhMine(i, regions))) items.push({
-      src: 'LH', title: i.pan_nm, url: i.detail_url, date: ymd(i.pan_dt), close: ymd(i.clsg_dt),
+      src: 'LH', title: i.pan_nm, url: i.detail_url || 'https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do', date: ymd(i.pan_dt), close: ymd(i.clsg_dt),
       region: i.cnp_cd_nm, type: i.ais_tp_cd_nm, status: i.pan_ss,
     });
   }).catch(e => errors.push({ source: 'LH', message: e.message }));

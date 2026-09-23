@@ -38,10 +38,11 @@ function tab(t){T=t;tMINE.className=t==='mine'?'on':'';tLH.className=t==='lh'?'o
  f.style.display=t==='mine'?'none':'';banner.textContent='';
  if(t==='lh'){fill(s1,LHTYPE);fill(s2,LHST);s2.style.display='';reg.style.display='';}else if(t==='sh'){fill(s1,SHCAT);s2.style.display='none';reg.style.display='none';}
  SHPAGE=1;list.innerHTML='';msg.textContent='검색을 눌러 주세요.';if(t==='mine')mine();}
-const dday=c=>{if(!c)return'';const d=Math.ceil((new Date(c+'T23:59:59+09:00')-Date.now())/864e5);
- return d<0?'마감':d===0?'<span class="dday">오늘 마감</span>':d<=3?`<span class="dday">D-${d}</span>`:'D-'+d;};
-const lhRow=(i,tag='')=>`<div class="row"><a href="${esc(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.region)}</span><span class="chip">${esc(i.type)}</span><span class="chip">${esc(i.status)}</span><span>공고 ${esc(i.date)}</span><span>마감 ${esc(i.close||'-')}</span><span>${dday(i.close)}</span></div></div>`;
-const shRow=(i,tag='')=>`<div class="row"><a href="${esc(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.dept)}</span><span>${esc(i.date)}</span><span>조회 ${esc(i.views)}</span></div></div>`;
+const dday=c=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(c||''))return'';const d=Math.ceil((new Date(c+'T00:00:00+09:00')-Date.now())/864e5);
+ return Number.isNaN(d)?'':d<0?'마감':d===0?'<span class="dday">오늘 마감</span>':d<=3?`<span class="dday">D-${d}</span>`:'D-'+d;};
+const link=u=>/^https?:\/\//.test(u||'')?esc(u):'#';
+const lhRow=(i,tag='')=>`<div class="row"><a href="${link(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.region)}</span><span class="chip">${esc(i.type)}</span><span class="chip">${esc(i.status)}</span><span>공고 ${esc(i.date)}</span><span>마감 ${esc(i.close||'-')}</span><span>${dday(i.close)}</span></div></div>`;
+const shRow=(i,tag='')=>`<div class="row"><a href="${link(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.dept)}</span><span>${esc(i.date)}</span><span>조회 ${esc(i.views)}</span></div></div>`;
 async function mine(){msg.textContent='불러오는 중…';
  try{const r=await fetch('/api/mine'),d=await r.json();
   if(d.allRegions)fill(reg,['','전국',...d.allRegions]);

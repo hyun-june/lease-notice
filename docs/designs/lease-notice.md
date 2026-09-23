@@ -76,10 +76,6 @@ LH·SH 임대공고를 사이트마다 들어가 확인하기 번거롭다. 한 
 4. README에 Vercel 배포와 지역 변경 방법을 적는다.
 5. 커밋 작성자를 hyun-june으로 다시 쓴 뒤 `hyun-june/lease-notice`를 만들고 push한다.
 
-## What I noticed about how you think
-- 목적을 "내가 작성할 수 있는 새로운 공고"로 잡았다. 목록 전체가 아니라 지원 가능한 공고를 원한다는 뜻이고, 그래서 유형 필터 전제가 나왔다.
-- "배포는 axhub가 아니라 내가 따로 vercel로" 하겠다고 했다. 운영은 직접 쥐고 구현만 맡기는 방식이다.
-- 레포 공개 여부는 권장안(비공개)을 따르지 않고 "공개로 해줘"라고 직접 정했다.
 
 <!-- gstack:office-hours:concerns:start -->
 ## Reviewer Concerns

@@ -1,1 +1,4 @@
-{"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)seen.json'"}
+{
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude)seen.json'",
+  "functions": { "api/*.js": { "maxDuration": 30 } }
+}

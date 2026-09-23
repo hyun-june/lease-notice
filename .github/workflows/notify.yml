@@ -35,7 +35,7 @@ jobs:
 
       # 실패해도 아래 seen.json 커밋은 반드시 돌아야 한다 (안 그러면 같은 공고가 30분마다 재발송)
       - name: 갱신된 refresh token 되쓰기
-        if: steps.run.outputs.new_refresh_token != ''
+        if: always() && steps.run.outputs.new_refresh_token != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}

@@ -2,6 +2,7 @@
 const { SH_BOARDS, shUrl, parseSh } = require('../lib');
 
 module.exports = async (req, res) => {
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   const inp = new URL(req.url, 'http://x').searchParams;
   const itm = Object.hasOwn(SH_BOARDS, inp.get('itm')) ? inp.get('itm') : '2';
   const page = Math.min(100, Math.max(1, parseInt(inp.get('page'), 10) || 1));

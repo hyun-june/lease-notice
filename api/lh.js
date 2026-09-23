@@ -3,6 +3,7 @@ const { ymd } = require('../lib');
 const LH = 'https://k-skill-proxy.nomadamas.org/v1/lh-notice/search';
 
 module.exports = async (req, res) => {
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   const inp = new URL(req.url, 'http://x').searchParams, p = new URLSearchParams();
   for (const k of ['q', 'uppAisTpCd', 'panSs', 'cnpCdNm']) if (inp.get(k)) p.set(k, inp.get(k));
   if (inp.has('pageSize')) p.set('pageSize', Math.min(1000, Math.max(1, parseInt(inp.get('pageSize'), 10) || 1000)));
@@ -14,7 +15,7 @@ module.exports = async (req, res) => {
     res.status(r.status).json({
       items: rows.map(i => ({
         title: i.pan_nm, region: i.cnp_cd_nm, type: i.ais_tp_cd_nm, status: i.pan_ss,
-        date: ymd(i.pan_dt), close: ymd(i.clsg_dt), url: i.detail_url, id: i.pan_id,
+        date: ymd(i.pan_dt), close: ymd(i.clsg_dt), url: i.detail_url || 'https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do', id: i.pan_id,
       })),
       total: region ? rows.length : (d.summary?.total_count ?? d.items?.[0]?.raw?.ALL_CNT ?? null), error: d.error, message: d.message,
     });
