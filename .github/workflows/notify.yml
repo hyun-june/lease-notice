@@ -1,0 +1,39 @@
+name: notify
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 공고 조회 및 알림 전송
+        id: run
+        env:
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+        run: node notify.js
+
+      - name: 갱신된 refresh token 되쓰기
+        if: steps.run.outputs.new_refresh_token != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: gh secret set KAKAO_REFRESH_TOKEN --body "${{ steps.run.outputs.new_refresh_token }}"
+
+      - name: seen.json 커밋
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add seen.json
+          git diff --cached --quiet || (git commit -m 'chore: update seen.json [skip ci]' && git push)
