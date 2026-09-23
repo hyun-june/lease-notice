@@ -176,6 +176,11 @@ async function main() {
     console.error('조회 실패 → 실행을 실패 처리합니다:\n  ' + failed.join('\n  '));
     process.exitCode = 1;
   }
+  if (all.length && !sent) {
+    // 권한 누락·토큰 문제로 전부 실패하면 조용히 재시도만 반복된다
+    console.error('카카오 전송이 전부 실패 → 실행을 실패 처리합니다');
+    process.exitCode = 1;
+  }
 }
 
 if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
