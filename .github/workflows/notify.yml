@@ -8,9 +8,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
 jobs:
   notify:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -25,13 +30,17 @@ jobs:
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
         run: node notify.js
 
+      # 실패해도 아래 seen.json 커밋은 반드시 돌아야 한다 (안 그러면 같은 공고가 30분마다 재발송)
       - name: 갱신된 refresh token 되쓰기
         if: steps.run.outputs.new_refresh_token != ''
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: gh secret set KAKAO_REFRESH_TOKEN --body "${{ steps.run.outputs.new_refresh_token }}"
+          NEW_TOKEN: ${{ steps.run.outputs.new_refresh_token }}
+        run: gh secret set KAKAO_REFRESH_TOKEN --body "$NEW_TOKEN"
 
       - name: seen.json 커밋
+        if: always()
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
