@@ -1,6 +1,6 @@
 # LH / SH 임대공고 뷰어 + 카카오톡 알림 봇
 
-LH 청약플러스 **공고중** 가운데 내 지역의 임대주택 공고와 SH **주택임대 게시판**을 30분마다 확인해,
+LH 청약플러스 **공고중** 가운데 내 지역의 임대주택 공고와 SH **주택임대 게시판**을 **매일 오전 9시**(GitHub 사정으로 수~수십 분 늦을 수 있음)에 확인해,
 새 공고를 카카오톡 "나에게 보내기"로 보내 줍니다. 목록은 웹 뷰어(Vercel)에서 봅니다.
 (GitHub cron은 정시에 안 돌고 5~15분 밀리는 게 정상입니다.)
 
@@ -68,7 +68,7 @@ GitHub Actions 실행이 **실패(빨간 X)** 로 끝나면 GitHub이 메일을 
 9. GitHub에서 **fine-grained Personal Access Token**을 발급하세요.
    (Repository access: **이 레포만**, Permissions → Repository permissions → **Secrets: Read and write**)
    - fine-grained PAT은 **만료일이 필수**입니다. 선택 가능한 **최대치(1년)** 로 잡고 캘린더에 갱신 알림을 걸어 두세요.
-   > **이 토큰이 없거나 만료되면** refresh token을 자동 갱신하지 못합니다. 증상은 "며칠간 같은 공고가 30분마다 중복 발송되다가 어느 날 완전히 멈춤"입니다. 그렇게 되면 7~12번을 다시 하세요.
+   > **이 토큰이 없거나 만료되면** refresh token을 자동 갱신하지 못합니다. 증상은 "며칠간 같은 공고가 매일 중복 발송되다가 어느 날 완전히 멈춤"입니다. 그렇게 되면 7~12번을 다시 하세요.
 > 10~14번은 hyun-june 계정으로 실행돼야 합니다. 같은 터미널에서 먼저 `export GH_TOKEN=$(gh auth token -u hyun-june)` 를 실행하세요. 전역 gh 활성 계정은 바뀌지 않습니다.
 
 10. `gh secret set KAKAO_REST_KEY -R hyun-june/lease-notice --body "<REST API 키>"` 를 실행하세요.

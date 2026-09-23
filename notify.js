@@ -7,7 +7,7 @@ const { shUrl, parseSh, ymd, loadConfig, lhMine, shOn } = require('./lib');
 const SEEN_PATH = path.join(__dirname, 'seen.json');
 const LH_API = 'https://k-skill-proxy.nomadamas.org/v1/lh-notice/search';
 const LH_LIST_URL = 'https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do';
-const MAX_SEND = 5;
+const MAX_SEND = 10; // 하루 1회 실행이라 5건이면 요약으로 너무 자주 밀린다
 const KEEP = 500;
 
 const dday = c => {
@@ -15,6 +15,9 @@ const dday = c => {
   const n = Math.ceil((new Date(c + 'T00:00:00+09:00') - Date.now()) / 864e5);
   return Number.isNaN(n) ? '' : n < 0 ? '마감' : n === 0 ? '오늘 마감' : `D-${n}`;
 };
+
+// 정정·재공고는 ID가 새로 붙어도 같은 공고다 → 제목에서 태그·공백·기호를 떼고 비교
+const norm = t => String(t || '').replace(/\[(정정|재)?공고\]|\[정정\]/g, '').replace(/[\s\[\]()'"`·.,\-]/g, '');
 
 // 두 목록을 번갈아 뽑아 한쪽이 발송 슬롯을 독점하지 못하게 한다
 const roundRobin = (a, b) => {
@@ -69,6 +72,7 @@ const lhAlerts = (items, regions) =>
     return {
       src: 'LH',
       id: String(i.pan_id),
+      key: norm(i.pan_nm),
       url: i.detail_url || LH_LIST_URL,
       text: [
         `[LH] ${[i.cnp_cd_nm, i.ais_tp_cd_nm].filter(Boolean).join(' · ')}`,
@@ -84,6 +88,7 @@ async function fetchShBoard() {
   return parseSh(await r.text(), '2').filter(i => i.seq).map(i => ({
     src: 'SH',
     id: String(i.seq),
+    key: norm(i.title),
     url: i.url,
     text: [`[SH] 주택임대`, i.title, i.date ? `등록 ${i.date}` : ''].filter(Boolean).join('\n'),
   }));
@@ -131,26 +136,41 @@ async function main() {
 
   // 한쪽이 죽어도 다른 쪽은 보낸다 (fail-soft). 실패/0건 소스는 seen 을 건드리지 않고, 끝에 실행을 실패 처리한다
   const failed = [];
-  let lh = [], sh = [];
+  let lh = [], sh = [], known = []; // known: 이미 보낸 공고 (제목 중복 비교용)
   try {
     const raw = await fetchLhRaw();
     if (!raw.length) failed.push('LH: 0건');
-    else lh = lhAlerts(raw, regions).filter(i => !seenLh.has(i.id)); // 필터 밖 공고는 seen 에 안 남는다
+    else {
+      const mine = lhAlerts(raw, regions); // 필터 밖 공고는 seen 에 안 남는다
+      lh = mine.filter(i => !seenLh.has(i.id));
+      known.push(...mine.filter(i => seenLh.has(i.id)));
+    }
   } catch (e) { failed.push('LH: ' + e.message); }
   if (shOn(regions)) {
     try {
       const r = await fetchShBoard();
       if (!r.length) failed.push('SH: 0건 (게시판 구조 변경 의심)');
-      else sh = r.filter(i => !seenSh.has(i.id));
+      else {
+        sh = r.filter(i => !seenSh.has(i.id));
+        known.push(...r.filter(i => seenSh.has(i.id)));
+      }
     } catch (e) { failed.push('SH: ' + e.message); }
   }
 
+  // 같은 제목(정정공고 포함)은 이미 보냈거나 이번에 먼저 나온 게 있으면 건너뛰고 seen 에만 남긴다
+  const seenKeys = new Set([...(seen.titles || []), ...known.map(i => i.key)]);
+  const recorded = new Set();
+  const dedup = list => list.filter(i => {
+    if (i.key && seenKeys.has(i.key)) { recorded.add(i.id); return false; }
+    if (i.key) seenKeys.add(i.key);
+    return true;
+  });
   // LH 물량이 SH 슬롯을 굶기지 않도록 번갈아 배치
-  const all = roundRobin(lh, sh);
+  const all = dedup(roundRobin(lh, sh));
   console.log(`지역 ${regions.join(', ') || '전국'} / LH 신규 ${lh.length}건 / SH 신규 ${sh.length}건`);
 
   let sent = 0;
-  const recorded = new Set();
+  const skipped = recorded.size;
   for (const item of all.slice(0, MAX_SEND)) {
     if (sent) await sleep(300);
     if (await send(token, item.text, item.url)) { sent++; recorded.add(item.id); }
@@ -168,9 +188,12 @@ async function main() {
 
   // 전송(또는 요약)에 성공한 건만 기록 → 실패분은 다음 실행에 재시도
   const merge = (old, add) => [...(old || []), ...add.filter(i => recorded.has(i.id)).map(i => i.id)].slice(-KEEP);
-  if (all.length) fs.writeFileSync(SEEN_PATH, JSON.stringify({ lh: merge(seen.lh, lh), sh: merge(seen.sh, sh) }, null, 0) + '\n');
+  const titles = [...(seen.titles || []), ...known.map(i => i.key), ...[...lh, ...sh].filter(i => i.key && recorded.has(i.id)).map(i => i.key)];
+  const keys = [...new Set(titles)].slice(-KEEP);
+  if (recorded.size || keys.length !== (seen.titles || []).length) // 새로 기록할 게 있을 때만 쓴다 (불필요한 커밋 방지)
+    fs.writeFileSync(SEEN_PATH, JSON.stringify({ lh: merge(seen.lh, lh), sh: merge(seen.sh, sh), titles: keys }, null, 0) + '\n');
 
-  console.log(`전송 ${sent}건`);
+  console.log(`전송 ${sent}건 / 중복 제목 건너뜀 ${skipped}건`);
   if (failed.length) {
     // 실행을 실패로 표시해야 GitHub 이 메일로 알려준다
     console.error('조회 실패 → 실행을 실패 처리합니다:\n  ' + failed.join('\n  '));
