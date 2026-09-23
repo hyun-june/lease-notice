@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: 문법·설정 자체 검사
+        run: for f in *.js api/*.js; do node --check "$f"; done && node lib.js
+
       - name: 공고 조회 및 알림 전송
         id: run
         env:
@@ -45,4 +48,4 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add seen.json
-          git diff --cached --quiet || (git commit -m 'chore: update seen.json [skip ci]' && git push)
+          git diff --cached --quiet || (git commit -m 'chore: update seen.json [skip ci]' && git pull --rebase && git push)

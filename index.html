@@ -1,0 +1,68 @@
+<!doctype html><html lang="ko"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>임대주택 공고</title><style>
+:root{--bg:#fff;--fg:#111;--mut:#666;--line:#e5e5e5;--acc:#1d6fd6;--chip:#f3f4f6;--warn:#fff4e5;--warnfg:#8a4b00}
+@media(prefers-color-scheme:dark){:root{--bg:#16181c;--fg:#eceff3;--mut:#9aa3ad;--line:#2c3038;--acc:#6aa8ff;--chip:#23262c;--warn:#3a2a12;--warnfg:#ffc27a}}
+*{box-sizing:border-box}body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"Apple SD Gothic Neo",sans-serif}
+.wrap{max-width:900px;margin:0 auto}h1{font-size:20px;margin:0 0 12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs button{border:0;background:none;color:var(--mut);font:inherit;padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--acc);font-weight:600}
+form{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+input,select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+input[type=text]{flex:1;min-width:140px}
+button.go{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 16px;font:inherit;cursor:pointer}
+.row{padding:11px 0;border-bottom:1px solid var(--line)}
+.row a{color:var(--fg);text-decoration:none;font-weight:500}.row a:hover{color:var(--acc)}
+.meta{color:var(--mut);font-size:13px;margin-top:3px;display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--chip);border-radius:4px;padding:1px 6px}
+.dday{color:#d64545;font-weight:600}
+#msg{color:var(--mut);padding:20px 0}
+#banner{background:var(--warn);color:var(--warnfg);border-radius:6px;padding:8px 12px;margin-bottom:8px}
+#banner:empty{display:none}
+</style><div class="wrap"><h1>임대주택 공고</h1>
+<div class="tabs"><button id="tMINE" class="on" onclick="tab('mine')">내 조건</button><button id="tLH" onclick="tab('lh')">LH</button><button id="tSH" onclick="tab('sh')">SH (서울)</button></div>
+<form id="f" onsubmit="go(event)">
+ <input type="text" id="q" placeholder="공고명 키워드 (예: 행복주택)">
+ <select id="s1"></select><select id="s2"></select>
+ <button class="go">검색</button></form>
+<div id="banner"></div><div id="msg">검색을 눌러 주세요.</div><div id="list"></div></div>
+<script>
+let T='mine';
+const LHTYPE=[['','전체 유형'],['06','임대주택'],['05','분양주택'],['13','주거복지·신혼희망타운'],['01','토지'],['22','상가']];
+const LHST=[['','전체 상태'],['공고중','공고중'],['접수중','접수중'],['접수마감','접수마감'],['당첨자발표','당첨자발표'],['추정공고','추정공고']];
+const SHCAT=[['2','주택임대'],['1','주택분양'],['512','주택매입·주거복지'],['4','입주안내'],['8','토지'],['16','상가/공장'],['32','보상/이주'],['64','현상설계'],['256','기타']];
+let SHPAGE=1;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const fill=(el,opts)=>el.innerHTML=opts.map(o=>Array.isArray(o)?`<option value="${o[0]}">${o[1]}</option>`:`<option value="${o}">${o||'전체 지역'}</option>`).join('');
+function tab(t){T=t;tMINE.className=t==='mine'?'on':'';tLH.className=t==='lh'?'on':'';tSH.className=t==='sh'?'on':'';
+ f.style.display=t==='mine'?'none':'';banner.textContent='';
+ if(t==='lh'){fill(s1,LHTYPE);fill(s2,LHST);s2.style.display='';reg.style.display='';}else if(t==='sh'){fill(s1,SHCAT);s2.style.display='none';reg.style.display='none';}
+ SHPAGE=1;list.innerHTML='';msg.textContent='검색을 눌러 주세요.';if(t==='mine')mine();}
+const dday=c=>{if(!c)return'';const d=Math.ceil((new Date(c+'T23:59:59+09:00')-Date.now())/864e5);
+ return d<0?'마감':d===0?'<span class="dday">오늘 마감</span>':d<=3?`<span class="dday">D-${d}</span>`:'D-'+d;};
+const lhRow=(i,tag='')=>`<div class="row"><a href="${esc(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.region)}</span><span class="chip">${esc(i.type)}</span><span class="chip">${esc(i.status)}</span><span>공고 ${esc(i.date)}</span><span>마감 ${esc(i.close||'-')}</span><span>${dday(i.close)}</span></div></div>`;
+const shRow=(i,tag='')=>`<div class="row"><a href="${esc(i.url)}" target="_blank">${tag}${esc(i.title)}</a><div class="meta"><span class="chip">${esc(i.dept)}</span><span>${esc(i.date)}</span><span>조회 ${esc(i.views)}</span></div></div>`;
+async function mine(){msg.textContent='불러오는 중…';
+ try{const r=await fetch('/api/mine'),d=await r.json();
+  if(d.allRegions)fill(reg,['','전국',...d.allRegions]);
+  if(T!=='mine')return;
+  if(d.error){banner.textContent='설정 오류 (config.json): '+(d.message||d.error);msg.textContent='';return;}
+  if(d.errors?.length)banner.textContent='일부 조회 실패 — 아래 목록은 불완전합니다: '+d.errors.map(e=>e.source+' '+e.message).join(' / ');
+  const it=d.items||[];msg.textContent=`지역: ${d.regions.length?d.regions.join(', '):'전국 전체'} (+전국 공고) · ${it.length?it.length+'건':'결과 없음'}`;
+  list.innerHTML=it.map(i=>i.src==='LH'?lhRow(i,'[LH] '):shRow(i,'[SH] ')).join('');
+ }catch(err){if(T==='mine'){banner.textContent='요청 실패: '+err;msg.textContent='';}}}
+async function go(e){if(e)e.preventDefault();msg.textContent='불러오는 중…';list.innerHTML='';
+ const p=new URLSearchParams();
+ if(T==='sh'&&e)SHPAGE=1;
+ if(T==='lh'){if(q.value)p.set('q',q.value);if(s1.value)p.set('uppAisTpCd',s1.value);if(s2.value)p.set('panSs',s2.value);
+  if(reg.value)p.set('cnpCdNm',reg.value);p.set('pageSize','1000');}
+ else{if(q.value)p.set('q',q.value);p.set('itm',s1.value);p.set('page',SHPAGE);}
+ try{const r=await fetch('/api/'+T+'?'+p),d=await r.json();
+  if(d.error){msg.textContent='오류: '+(d.message||d.error);return;}
+  const it=d.items||[];msg.textContent=it.length?`${it.length}건${d.total?' / 전체 '+d.total+'건':''}${T==='sh'?' · '+SHPAGE+'페이지 (10건씩)':''}`:'결과 없음';
+  list.innerHTML=it.map(i=>T==='lh'?lhRow(i):shRow(i)).join('');
+  if(T==='sh'&&it.length)list.innerHTML+=`<div class="row" style="border:0"><button class="go" ${SHPAGE<2?'disabled':''} onclick="SHPAGE--;go()">← 이전</button> <button class="go" onclick="SHPAGE++;go()">다음 →</button></div>`;
+ }catch(err){msg.textContent='요청 실패: '+err;}}
+const reg=document.createElement('select');reg.id='reg';fill(reg,['','전국']);f.insertBefore(reg,f.querySelector('.go'));
+tab('mine');
+</script></html>

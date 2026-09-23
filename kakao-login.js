@@ -40,9 +40,9 @@ const server = http.createServer(async (req, res) => {
   console.log('  ' + d.refresh_token);
   console.log('\n' + '='.repeat(60));
   console.log('\n아래 3줄을 그대로 복붙하세요 (GH_PAT은 본인 값으로 교체):\n');
-  console.log(`gh secret set KAKAO_REST_KEY --body "${KEY}"`);
-  console.log(`gh secret set KAKAO_REFRESH_TOKEN --body "${d.refresh_token}"`);
-  console.log(`gh secret set GH_PAT --body "<fine-grained PAT>"`);
+  console.log(`gh secret set KAKAO_REST_KEY -R hyun-june/lease-notice --body "${KEY}"`);
+  console.log(`gh secret set KAKAO_REFRESH_TOKEN -R hyun-june/lease-notice --body "${d.refresh_token}"`);
+  console.log(`gh secret set GH_PAT -R hyun-june/lease-notice --body "<fine-grained PAT>"`);
   console.log('');
   server.close(() => process.exit(0));
 });

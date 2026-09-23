@@ -2,55 +2,13 @@
 // LH + SH 신규 임대공고 → 카카오톡 "나에게 보내기". 의존성 0개, Node 20 내장 fetch만 사용.
 const fs = require('fs');
 const path = require('path');
+const { shUrl, parseSh, ymd, loadConfig, lhMine, shOn } = require('./lib');
 
 const SEEN_PATH = path.join(__dirname, 'seen.json');
 const LH_API = 'https://k-skill-proxy.nomadamas.org/v1/lh-notice/search';
 const LH_LIST_URL = 'https://apply.lh.or.kr/lhapply/apply/wt/wrtanc/selectWrtancList.do';
 const MAX_SEND = 5;
 const KEEP = 500;
-
-// SH 공고 게시판: 탭마다 프로그램 경로가 다르다 (i-sh.co.kr 네비게이션 기준)
-const SH_BOARDS = {
-  '2':   ['S1T294C297', 'm_247'],  // 주택임대
-  '1':   ['S1T294C296', 'm_244'],  // 주택분양
-  '512': ['S1T294C3379', 'm_247'], // 주택매입
-  '8':   ['S1T294C299', 'm_255'],  // 토지
-  '16':  ['S1T294C300', 'm_256'],  // 상가/공장
-  '4':   ['S1T294C298', 'm_248'],  // 입주안내
-  '32':  ['S1T294C301', 'm_257'],  // 보상/이주
-  '64':  ['S1T294C302', 'm_258'],  // 현상설계
-  '256': ['S1T294C304', 'm_260'],  // 기타
-};
-const shUrl = (seq, page, word) => {
-  const [prog, m] = SH_BOARDS[seq] || SH_BOARDS['2'];
-  const u = new URL(`https://www.i-sh.co.kr/app/lay2/program/${prog}/www/brd/${m}/list.do`);
-  u.searchParams.set('multi_itm_seq', seq);
-  if (page) u.searchParams.set('page', page);
-  if (word) { u.searchParams.set('srchWord', word); u.searchParams.set('srchTp', '0'); } // srchTp 없으면 SH가 srchWord를 무시함
-  return u.toString();
-};
-const shDetail = (seq, itm) => {
-  const [prog, m] = SH_BOARDS[itm] || SH_BOARDS['2'];
-  return `https://www.i-sh.co.kr/app/lay2/program/${prog}/www/brd/${m}/view.do?multi_itm_seq=${itm}&seq=${seq}`;
-};
-
-const text = h => h.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
-
-function parseSh(html, itm) {
-  const body = html.split('<tbody')[1] || '';
-  return body.split('<tr').slice(1).map(row => {
-    const m = row.match(/getDetailView\('(\d+)'\)/);
-    if (!m) return null;
-    const a = row.match(/<a[^>]*getDetailView[\s\S]*?<\/a>/);
-    const tds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(x => text(x[1]));
-    const title = a ? text(a[0].replace(/<span class="icoNew">[\s\S]*?<\/span>/, '')) : '';
-    const date = tds.find(t => /^\d{4}-\d{2}-\d{2}$/.test(t)) || '';
-    return { seq: m[1], title, dept: tds[2] || '', date, views: tds[tds.length - 1] || '', url: shDetail(m[1], itm) };
-  }).filter(Boolean);
-}
-
-// LH는 20260921 / 2026.10.16 두 형식이 섞여 내려온다
-const ymd = s => { const d = String(s || '').replace(/[.\-]/g, ''); return d.length === 8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6)}` : (s || ''); };
 
 const dday = c => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(c || '')) return ''; // 파싱 불가한 clsg_dt → 마감줄 생략
@@ -93,15 +51,23 @@ async function refreshToken(key, refresh) {
   return d.access_token;
 }
 
-async function fetchLh() {
-  // 지역 필터는 LH가 지원하지 않아 서버가 전량 받은 뒤 걸러야 한다 → 여기서는 공고중 전체를 받는다
+// 원본 items 반환 (0건 판정은 필터 전 기준)
+async function fetchLhRaw() {
+  // 지역 필터는 LH가 지원하지 않아 전량 받은 뒤 걸러야 한다 → 공고중 전체를 받는다
   const r = await fetch(`${LH_API}?panSs=${encodeURIComponent('공고중')}&pageSize=1000`, { signal: TIMEOUT() });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const d = await r.json();
   if (d.error) throw new Error(d.message || d.error);
-  return (d.items || []).filter(i => i.pan_id).map(i => { // id 없으면 버린다 (seen 오염 방지)
+  const items = d.items || [];
+  if (items.length >= 1000) console.warn(`경고: LH 결과가 ${items.length}건 → pageSize 1000 한도에 걸려 누락됐을 수 있습니다.`);
+  return items;
+}
+
+const lhAlerts = (items, regions) =>
+  items.filter(i => i.pan_id && lhMine(i, regions)).map(i => { // id 없으면 버린다 (seen 오염 방지)
     const close = ymd(i.clsg_dt), dd = dday(close);
     return {
+      src: 'LH',
       id: String(i.pan_id),
       url: i.detail_url || LH_LIST_URL,
       text: [
@@ -111,12 +77,12 @@ async function fetchLh() {
       ].filter(Boolean).join('\n'),
     };
   });
-}
 
 async function fetchShBoard() {
   const r = await fetch(shUrl('2', 1, null), { signal: TIMEOUT() });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return parseSh(await r.text(), '2').filter(i => i.seq).map(i => ({
+    src: 'SH',
     id: String(i.seq),
     url: i.url,
     text: [`[SH] 주택임대`, i.title, i.date ? `등록 ${i.date}` : ''].filter(Boolean).join('\n'),
@@ -147,6 +113,8 @@ async function send(token, body, url) {
 }
 
 async function main() {
+  const { regions } = loadConfig(); // 설정이 깨졌으면 여기서 실패로 끝낸다
+
   const key = process.env.KAKAO_REST_KEY;
   const refresh = process.env.KAKAO_REFRESH_TOKEN;
   if (!key || !refresh) {
@@ -161,18 +129,25 @@ async function main() {
   const seenLh = new Set(seen.lh || []);
   const seenSh = new Set(seen.sh || []);
 
-  // 한쪽이 죽어도 다른 쪽은 보낸다 (fail-soft)
-  let lh = [], sh = [], lhOk = false, shOk = false;
-  try { const r = await fetchLh(); lhOk = r.length > 0; lh = r.filter(i => !seenLh.has(i.id)); }
-  catch (e) { console.error('LH 조회 실패:', e.message); }
-  try { const r = await fetchShBoard(); shOk = r.length > 0; sh = r.filter(i => !seenSh.has(i.id)); }
-  catch (e) { console.error('SH 조회 실패:', e.message); }
+  // 한쪽이 죽어도 다른 쪽은 보낸다 (fail-soft). 실패/0건 소스는 seen 을 건드리지 않고, 끝에 실행을 실패 처리한다
+  const failed = [];
+  let lh = [], sh = [];
+  try {
+    const raw = await fetchLhRaw();
+    if (!raw.length) failed.push('LH: 0건');
+    else lh = lhAlerts(raw, regions).filter(i => !seenLh.has(i.id)); // 필터 밖 공고는 seen 에 안 남는다
+  } catch (e) { failed.push('LH: ' + e.message); }
+  if (shOn(regions)) {
+    try {
+      const r = await fetchShBoard();
+      if (!r.length) failed.push('SH: 0건 (게시판 구조 변경 의심)');
+      else sh = r.filter(i => !seenSh.has(i.id));
+    } catch (e) { failed.push('SH: ' + e.message); }
+  }
 
   // LH 물량이 SH 슬롯을 굶기지 않도록 번갈아 배치
   const all = roundRobin(lh, sh);
-  if (!lhOk && !shOk) console.warn('경고: LH·SH 양쪽 조회가 모두 실패했습니다.');
-  console.log(`LH 신규 ${lh.length}건 / SH 신규 ${sh.length}건`);
-  if (!all.length) { console.log('전송 0건'); return; }
+  console.log(`지역 ${regions.join(', ') || '전국'} / LH 신규 ${lh.length}건 / SH 신규 ${sh.length}건`);
 
   let sent = 0;
   const recorded = new Set();
@@ -183,8 +158,9 @@ async function main() {
   const rest = all.slice(MAX_SEND);
   if (rest.length) {
     await sleep(300);
+    const a = rest.filter(i => i.src === 'LH').length, b = rest.length - a;
     // 요약 전송이 실패하면 초과분은 기록하지 않는다 (조용한 유실 방지)
-    if (await send(token, `외 ${rest.length}건 더 있음`, LH_LIST_URL)) {
+    if (await send(token, `외 ${rest.length}건 더 있음 (LH ${a}건 · SH ${b}건)`, a ? LH_LIST_URL : shUrl('2'))) {
       sent++;
       rest.forEach(i => recorded.add(i.id));
     } else console.error(`요약 전송 실패 → 초과 ${rest.length}건은 다음 실행에 재시도`);
@@ -192,9 +168,16 @@ async function main() {
 
   // 전송(또는 요약)에 성공한 건만 기록 → 실패분은 다음 실행에 재시도
   const merge = (old, add) => [...(old || []), ...add.filter(i => recorded.has(i.id)).map(i => i.id)].slice(-KEEP);
-  fs.writeFileSync(SEEN_PATH, JSON.stringify({ lh: merge(seen.lh, lh), sh: merge(seen.sh, sh) }, null, 0) + '\n');
+  if (all.length) fs.writeFileSync(SEEN_PATH, JSON.stringify({ lh: merge(seen.lh, lh), sh: merge(seen.sh, sh) }, null, 0) + '\n');
 
-  console.log(`LH 신규 ${lh.length}건 / SH 신규 ${sh.length}건 / 전송 ${sent}건`);
+  console.log(`전송 ${sent}건`);
+  if (failed.length) {
+    // 실행을 실패로 표시해야 GitHub 이 메일로 알려준다
+    console.error('조회 실패 → 실행을 실패 처리합니다:\n  ' + failed.join('\n  '));
+    process.exitCode = 1;
+  }
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });
+
+module.exports = { fetchLhRaw, lhAlerts, fetchShBoard };
