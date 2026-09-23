@@ -69,6 +69,8 @@ GitHub Actions 실행이 **실패(빨간 X)** 로 끝나면 GitHub이 메일을 
    (Repository access: **이 레포만**, Permissions → Repository permissions → **Secrets: Read and write**)
    - fine-grained PAT은 **만료일이 필수**입니다. 선택 가능한 **최대치(1년)** 로 잡고 캘린더에 갱신 알림을 걸어 두세요.
    > **이 토큰이 없거나 만료되면** refresh token을 자동 갱신하지 못합니다. 증상은 "며칠간 같은 공고가 30분마다 중복 발송되다가 어느 날 완전히 멈춤"입니다. 그렇게 되면 7~12번을 다시 하세요.
+> 10~14번은 hyun-june 계정으로 실행돼야 합니다. 같은 터미널에서 먼저 `export GH_TOKEN=$(gh auth token -u hyun-june)` 를 실행하세요. 전역 gh 활성 계정은 바뀌지 않습니다.
+
 10. `gh secret set KAKAO_REST_KEY -R hyun-june/lease-notice --body "<REST API 키>"` 를 실행하세요.
 11. `gh secret set KAKAO_REFRESH_TOKEN -R hyun-june/lease-notice --body "<8번의 refresh token>"` 를 실행하세요.
 12. `gh secret set GH_PAT -R hyun-june/lease-notice --body "<9번의 PAT>"` 를 실행하세요.
